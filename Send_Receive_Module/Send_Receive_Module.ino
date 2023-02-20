@@ -4,6 +4,7 @@
 
 const byte interruptPin = 0;
 String userInput = "";
+char id='1';
 void setup() {
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
@@ -15,7 +16,7 @@ void getInput(){
   if (Serial.available()) {
     userInput = Serial.readStringUntil('\n');
     Serial.println("You entered: " + userInput);
-    userInput=id+' '+UserInput+' '+id;
+    userInput=id+' '+userInput+' '+id;
   }else{
     Serial.println("Serial not found");
   }
@@ -27,7 +28,6 @@ void blink() {
 }
 
 bool recv = true;
-char id='1';
 
 //While sending a msg only accept from those which have id less than yours.
 
