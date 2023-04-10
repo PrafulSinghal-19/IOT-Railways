@@ -4,7 +4,7 @@
 
 const byte interruptPin = 0;
 String userInput = "";
-char id='1';
+String id="2";
 void setup() {
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
@@ -42,7 +42,7 @@ void loop() {
     Serial.println(1+" recieved "+incoming);
     Serial.print("RSSI: ");
     Serial.println(LoRa.packetRssi());
-    if(incoming[0]<id)recv = false;
+    if(incoming[0]-'0'<id.toInt())recv = false;
   }
   if(!recv){
     Serial.println("Trying to send...");
