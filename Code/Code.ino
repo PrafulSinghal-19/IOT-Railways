@@ -42,6 +42,14 @@ void handleOrder(){
   message = server.arg("plain");        
   server.send(200, "text/plain", "ORDER"+message);
   Serial.println("message: "+message);
+
+  Serial.println("Trying to send order...");
+  String sendingMessage = id+" got and sent "+message;
+  LoRa.beginPacket();
+  LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+  LoRa.print(sendingMessage);
+  LoRa.endPacket();
+  Serial.println(id+" sending "+sendingMessage);
 }
 
 void setup() {
@@ -51,6 +59,7 @@ void setup() {
   // attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
   //WIFI Kit series V1 not support Vext control
   Heltec.begin(true , true , true , true , BAND );
+  Heltec.display("Id: "+id);
   // int a = digitalRead(interruptPin);
 
   // Connect to Wi-Fi network with SSID and password
