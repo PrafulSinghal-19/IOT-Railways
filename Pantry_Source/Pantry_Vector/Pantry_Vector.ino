@@ -22,18 +22,19 @@ String id="05";
 
 Vector<Vector<String>> orders;
 Vector<int> packetsLeft;
-
+int packetsLeftContainer[NUM_NODES];
+Vector<String> orderContainer[NUM_NODES];
 
 void setup() {
   //WIFI Kit series V1 not support Vext control
-  for(int i = 0; i < NUM_NODES; i++){
-    orders.push_back({});
-    packetsLeft.push_back(0);
-  }
+  packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
+  orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
   Heltec.begin(true , true , true , true , BAND );
   Heltec.display->clear();
   Heltec.display->setFont(ArialMT_Plain_10);
   Serial.println("id: "+id);
+  Serial.println("size of orders: " + String(orders.size()));
+  Serial.println("size of packetsLeft array: " + String(packetsLeft.size()));
 }
 
 void displayOrders(int nodeIndex){
@@ -75,6 +76,7 @@ void loop() {
       incoming+=(char)LoRa.read();
     }
     int srcNodeIndex = incoming.substring(2,4).toInt() - 1;
+    Serial.println("recieved from node index: " + String(srcNodeIndex));
     Serial.println(id+" received "+incoming);
     Serial.print("RSSI: ");
     Serial.println(LoRa.packetRssi());
@@ -83,8 +85,9 @@ void loop() {
       if(packetsLeft[srcNodeIndex] == 0) {
         int count = incoming.substring(4,8).toInt();
         packetsLeft[srcNodeIndex] = count;
-        String orderChunks[count];
+        String* orderChunks = new String[count];
         orders[srcNodeIndex].setStorage(orderChunks, count, count);
+        Serial.println("size of orders in srcNode: " + orders[srcNodeIndex].size());
       }
     }
     else {
