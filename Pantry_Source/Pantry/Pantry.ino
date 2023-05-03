@@ -1,127 +1,83 @@
 #include "heltec.h"
+#include "ArduinoJson.h"
 
-// length (8 bytes) 
-// Load Wi-Fi library
-// #include <WiFi.h>
-// #include <WebServer.h>
-// #include <ESPmDNS.h>
+/* 
+First:
+<prev_src> 2
+<src-id> 2
+<length> 4
+<message> "First"
 
+Next:
+<prev_src> 2
+<src> 2
+<seq> 4
+<message> ...
+*/
 #define BAND    868E6  //change this Band and set Class C
-
 #define PANTRY "5"
-
-// const byte interruptPin = 0;
-// String userInput = "";
-String id="5";
-
-
-// Replace with your network credentials
-// String _ssid = "ESP32-Access-Point"+id;
-// const char* ssid     = _ssid.c_str();
-// const char* password = "123456789";
-
-// // Set web server port number to 80
-// WebServer server(80);
-
-
-// void handleOrder(){
-//   userInput = server.arg("plain");        
-//   server.send(200, "text/plain", "ORDER"+userInput);
-//   Serial.println("message: "+userInput);
-
-//   Serial.println("Trying to send order...");
-//   String sendingMessage = id+" got and sent "+userInput;
-//   userInput=sendingMessage;
-// }
+String id="05";
 
 void setup() {
-  // pinMode(interruptPin, INPUT_PULLUP);
-  // attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
   //WIFI Kit series V1 not support Vext control
   Heltec.begin(true , true , true , true , BAND );
-  // int a = digitalRead(interruptPin);
-
-  // Connect to Wi-Fi network with SSID and password
-  // Serial.print("Setting AP (Access Point)…");
-  // // Remove the password parameter, if you want the AP (Access Point) to be open
-  // WiFi.softAP(ssid, password);
-
-  // IPAddress IP = WiFi.softAPIP();
-  // Serial.print("AP IP address: ");
-  // Serial.println(IP);
-  
-  // // server.begin();
-  // if (MDNS.begin("esp32")) {
-  //   Serial.println("MDNS responder started");
-  // }
-
-  // server.on("/order",HTTP_POST, handleOrder);
-
-  // // server.onNotFound(handleNotFound);
-
-  // server.begin();
-  // Serial.println("HTTP server started "+id);
-  
+  Heltec.display->clear();
+  Heltec.display->setFont(ArialMT_Plain_10);
   Serial.println("id: "+id);
-
 }
-// void getInput(){
-//   if (Serial.available()) {
-//     userInput = Serial.readStringUntil('\n');
-//     Serial.println("You entered: " + userInput);
-//     userInput=id+' '+userInput+' '+id;
-//   }else{
-//     Serial.println("Serial not found");
-//   }
-// }
-// void blink() {
-//   Serial.println("Inside Blink");
-//   // int a = digitalRead(interruptPin);
-//   getInput();
-// }
-
-// bool recv = true;
-
-//While sending a msg only accept from those which have id less than yours.
 
 void loop() {
-  // server.handleClient();
-
   int packetSize = LoRa.parsePacket();
   String incoming = "";
+  String jsonMessage = "";
   if (packetSize) {
     Serial.print("Received packet: ");
     while (LoRa.available()) {
       incoming+=(char)LoRa.read();
     }
-    Serial.println(id+" recieved "+incoming);
+    Serial.println(id+" received "+incoming);
     Serial.print("RSSI: ");
     Serial.println(LoRa.packetRssi());
-    // if(incoming[0]-'0'<id.toInt())recv = false;
-  }
-  // if(!recv){
-  //   Serial.println("Trying to send...");
-  //   String sendingMessage = id+" got and sent "+incoming;
-  //   LoRa.beginPacket();
-  //   LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
-  //   LoRa.print(sendingMessage);
-  //   LoRa.endPacket();
-  //   Serial.println(id+" sending "+sendingMessage);
-  //   recv = true;
-  // }
-  // if(userInput!=""){
-  //   Serial.println("u: "+userInput);
+    if(incoming.substring(8) == "First"){
+      int count = incoming.substring(4,8).toInt();
+      int packetCount = 0;
+      jsonMessage = "";
+      while(packetCount < count){
+        while(!LoRa.parsePacket());
+        String temp = "";
+        while (LoRa.available()) {
+          temp+=(char)LoRa.read();
+        }
+        if(temp.substring(2,4) != incoming.substring(2,4)) continue; // skips the packet when not from the source which send the first packet
+        // replace prev-id with the current id
+        Serial.println(id+"temp received with " + String(packetCount) + " : " +temp);
+        Serial.print("RSSI: ");
+        Serial.println(LoRa.packetRssi());
+        jsonMessage += temp.substring(8);
+        packetCount = packetCount + 1;
+        if(temp.substring(4,8).toInt() == count -1) break; // check for last packet if some packet missed
+      }
 
-  //   int len = userInput.length();
-  //   for(int x = 0;x<=len/32;x++){
-  //     String temp = userInput.substring(x*32,min(len,(x+1)*32));
-  //     LoRa.beginPacket();
-  //     LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
-  //     LoRa.print(temp);
-  //     LoRa.endPacket();
-  //     delay(500);
-  //   }
-  //   userInput = "";
-  // }
-      
+      Serial.println("received json message: " + jsonMessage);
+      DynamicJsonDocument doc(jsonMessage.length()*10);
+      DeserializationError error = deserializeJson(doc, jsonMessage);
+
+      if (!error) {
+        String name = doc["name"];  // Access "name"
+        String coach = doc["coach"];       // Access "coach"
+        int seat = doc["seat"];
+        double totalPrice = doc["totalPrice"];
+        Serial.println("person: " + name + " ordering from coach: " + coach + " on seat: " + seat + " total price: " + totalPrice);
+        JsonArray items = doc["items"];
+        for (JsonVariant item : items) {
+          String itemName = item["name"];    // Access "name" within each item
+          double itemPrice = item["price"];     // Access "price" within each item
+          int quantity = item["quantity"];
+          Serial.println("item: " + itemName + " : " + String(itemPrice) + " quantity: " + quantity);
+        }
+      } else {
+        Serial.println("Parsing failed with error: " + String(error.c_str()));
+      }
+    }
+  }
 }
