@@ -19,6 +19,7 @@ Next:
 #define PANTRY "5"
 #define NUM_NODES 4
 #define ORDER_DISPLAY 20
+#define TIMEOUT 60*1000
 String id="05";
 
 Vector<Vector<String>> orders;
@@ -29,6 +30,7 @@ Vector<String> orderContainer[NUM_NODES];
 String orderDisplayContainer[ORDER_DISPLAY];
 Vector<String> orderDisplayed;
 
+unsigned long start;
 
 void setup() {
   //WIFI Kit series V1 not support Vext control
@@ -39,6 +41,8 @@ void setup() {
   Heltec.display->clear();
   Heltec.display->setFont(ArialMT_Plain_10);
   
+  start = millis();
+
   Serial.println("id: "+id);
   Serial.println("size of orders: " + String(orders.size()));
   Serial.println("size of packetsLeft array: " + String(packetsLeft.size()));
@@ -118,5 +122,13 @@ void loop() {
         displayOrders(srcNodeIndex);
       } 
     }
+    start = millis();
   }
+
+  if(millis()-start>TIMEOUT){
+    Serial.println("Timeout reached clearing orders");
+    start = millis();
+    orderDisplayed.clear();
+  }
+
 }
