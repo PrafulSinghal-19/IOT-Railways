@@ -36,15 +36,20 @@ bool pushedSourceIdContainer[NUM_NODES];
 
 unsigned long start;
 
+int lineNumber = 0;
+
 void setup() {
   //WIFI Kit series V1 not support Vext control
   packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
   orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
   orderDisplayed.setStorage(orderDisplayContainer,ORDER_DISPLAY,0);
   pushedSourceId.setStorage(pushedSourceIdContainer,NUM_NODES,NUM_NODES);
+
   Heltec.begin(true , true , true , true , BAND );
   Heltec.display->clear();
   Heltec.display->setFont(ArialMT_Plain_10);
+  Heltec.display->drawString(0,0,id);
+  Heltec.display->display();
   
   start = millis();
 
@@ -63,6 +68,7 @@ void displayOrders(int nodeIndex){
   }
 
   if(jsonMessage!=""){
+    Serial.println(jsonMessage);
     DynamicJsonDocument doc(jsonMessage.length()*10);
     DeserializationError error = deserializeJson(doc, jsonMessage);
 
@@ -77,6 +83,8 @@ void displayOrders(int nodeIndex){
           return;
         }
       }
+      Heltec.display->drawString(0,lineNumber,name+" "+coach+" "+seat);  lineNumber+=11;
+      Heltec.display->display();
       Serial.println("person: " + name + " ordering from coach: " + coach + " on seat: " + seat + " total price: " + totalPrice);
       JsonArray items = doc["items"];
       for (JsonVariant item : items) {
@@ -84,6 +92,8 @@ void displayOrders(int nodeIndex){
         double itemPrice = item["price"];     // Access "price" within each item
         int quantity = item["quantity"];
         Serial.println("item: " + itemName + " : " + String(itemPrice) + " quantity: " + quantity);
+        Heltec.display->drawString(0,lineNumber,itemName+" "+quantity);  lineNumber+=11;
+        Heltec.display->display();
       }
       
       orderDisplayed.push_back(coach+String(seat));
@@ -133,12 +143,19 @@ void loop() {
   }
 
   if(millis()-start>TIMEOUT){
+    for(;lineNumber>=0;lineNumber-=11){
+      Heltec.display->clear();
+    }
+    Heltec.display->display();
+    lineNumber = 0;
     for(int x = 0;x<NUM_NODES;x++){
       displayOrders(x);
     }
     for(int x = 0;x<pushedSourceId.size();x++){
       if(pushedSourceId[x]){
         Serial.println(String(x+1)+" wants to order.");
+        Heltec.display->drawString(0,lineNumber,String(x+1)+" wants to order.");  lineNumber+=11;
+        Heltec.display->display();
         pushedSourceId[x] = false;
       }
     }

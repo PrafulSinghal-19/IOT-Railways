@@ -15,7 +15,7 @@
 
 const byte interruptPin = 0;
 String userInput = "";
-String id="03";
+String id="01";
 
 
 Vector<Vector<String>> orders;
@@ -52,7 +52,10 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
   //WIFI Kit series V1 not support Vext control
   Heltec.begin(true , true , true , true , BAND );
-
+  Heltec.display->clear();
+  Heltec.display->setFont(ArialMT_Plain_10);
+  Heltec.display->drawString(0,0,id);
+  Heltec.display->display();
   // Connect to Wi-Fi network with SSID and password
   Serial.print("Setting AP (Access Point)…");
   // Remove the password parameter, if you want the AP (Access Point) to be open
