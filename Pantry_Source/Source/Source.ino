@@ -15,14 +15,11 @@
 
 const byte interruptPin = 0;
 String userInput = "";
-String id="01";
+String id="03";
 
 
 Vector<Vector<String>> orders;
 Vector<String> orderContainer[NUM_NODES];
-
-Vector<int> packetsLeft;
-int packetsLeftContainer[NUM_NODES];
 
 // Replace with your network credentials
 String _ssid = "ESP32-Access-Point"+id;
@@ -46,7 +43,6 @@ void handleOrder(){
 
 void setup() {
   orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
-  packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
   pushedMessages.setStorage(pushedMessagesContainer,NUM_NODES,NUM_NODES);
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
@@ -117,9 +113,8 @@ void loop() {
     Serial.println("prev id: "+ prevId + " " + prevId.toInt());
     if(prevId.toInt() < id.toInt()){
       if(incoming.substring(8) == "First"){
-        if(packetsLeft[srcNodeIndex] == 0) {
+        if(orders[srcNodeIndex].size() == 0) {
           int count = incoming.substring(4,8).toInt();
-          packetsLeft[srcNodeIndex] = count;
           String* orderChunks = new String[count];
           orders[srcNodeIndex].setStorage(orderChunks, count+1, count+1);
           Serial.println("size of orders in srcNode: " + orders[srcNodeIndex].size());
@@ -131,9 +126,8 @@ void loop() {
       }
       else {
         int sequenceNo = incoming.substring(4,8).toInt();
-        if(orders[srcNodeIndex][sequenceNo].length() == 0){
-          orders[srcNodeIndex][sequenceNo] = incoming;
-          packetsLeft[srcNodeIndex] = packetsLeft[srcNodeIndex] - 1;
+        if(orders[srcNodeIndex][sequenceNo+1].length() == 0){
+          orders[srcNodeIndex][sequenceNo+1] = incoming;
         }
       }
     }
@@ -200,25 +194,24 @@ void loop() {
         }
       }
       orders[x].clear();
-
-      for(int x = 0;x<pushedMessages.size();x++){
-        String message = pushedMessages[x];
-        if(message!=""){
-          String prevId = message.substring(0,2);
-          Serial.println("prev id: "+ prevId + " " + prevId.toInt());
-          if(prevId.toInt() < id.toInt()){
-            for(int j = 0; j < id.length(); j++){
-              message[j] = id[j];
-            }
-            LoRa.beginPacket();
-            LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
-            LoRa.print(message);
-            LoRa.endPacket();
-            Serial.println(id+" message sent with: " +message);
-            delay(DELAY);
-          } 
-          pushedMessages[x] = "";
-        }
+    }
+    for(int x = 0;x<pushedMessages.size();x++){
+      String message = pushedMessages[x];
+      if(message!=""){
+        String prevId = message.substring(0,2);
+        Serial.println("prev id: "+ prevId + " " + prevId.toInt());
+        if(prevId.toInt() < id.toInt()){
+          for(int j = 0; j < id.length(); j++){
+            message[j] = id[j];
+          }
+          LoRa.beginPacket();
+          LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+          LoRa.print(message);
+          LoRa.endPacket();
+          Serial.println(id+" message sent with: " +message);
+          delay(DELAY);
+        } 
+        pushedMessages[x] = "";
       }
     }
     start = millis();

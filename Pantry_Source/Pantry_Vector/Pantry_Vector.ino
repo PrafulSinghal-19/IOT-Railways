@@ -24,8 +24,6 @@ Next:
 String id="05";
 
 Vector<Vector<String>> orders;
-Vector<int> packetsLeft;
-int packetsLeftContainer[NUM_NODES];
 Vector<String> orderContainer[NUM_NODES];
 
 String orderDisplayContainer[ORDER_DISPLAY];
@@ -40,7 +38,6 @@ int lineNumber = 0;
 
 void setup() {
   //WIFI Kit series V1 not support Vext control
-  packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
   orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
   orderDisplayed.setStorage(orderDisplayContainer,ORDER_DISPLAY,0);
   pushedSourceId.setStorage(pushedSourceIdContainer,NUM_NODES,NUM_NODES);
@@ -55,12 +52,9 @@ void setup() {
 
   Serial.println("id: "+id);
   Serial.println("size of orders: " + String(orders.size()));
-  Serial.println("size of packetsLeft array: " + String(packetsLeft.size()));
 }
 
 void displayOrders(int nodeIndex){
-
-  Serial.println("message completely recieved for node: " + String(nodeIndex));
   String jsonMessage = "";
 
   for(int i = 0; i < orders[nodeIndex].size() ; i++){
@@ -117,13 +111,10 @@ void loop() {
     int srcNodeIndex = incoming.substring(2,4).toInt() - 1;
     Serial.println("recieved from node index: " + String(srcNodeIndex));
     Serial.println(id+" received "+incoming);
-    Serial.print("RSSI: ");
-    Serial.println(LoRa.packetRssi());
 
     if(incoming.substring(8) == "First"){
-      if(packetsLeft[srcNodeIndex] == 0) {
+      if(orders[srcNodeIndex].size() == 0) {
         int count = incoming.substring(4,8).toInt();
-        packetsLeft[srcNodeIndex] = count;
         String* orderChunks = new String[count];
         orders[srcNodeIndex].setStorage(orderChunks, count, count);
         Serial.println("size of orders in srcNode: " + orders[srcNodeIndex].size());
@@ -136,20 +127,18 @@ void loop() {
       int sequenceNo = incoming.substring(4,8).toInt();
       if(orders[srcNodeIndex][sequenceNo].length() == 0){
         orders[srcNodeIndex][sequenceNo] = incoming.substring(8);
-        packetsLeft[srcNodeIndex] = packetsLeft[srcNodeIndex] - 1;
       }
     }
     start = millis();
   }
 
   if(millis()-start>TIMEOUT){
-    for(;lineNumber>=0;lineNumber-=11){
-      Heltec.display->clear();
-    }
+    Heltec.display->clear();
     Heltec.display->display();
     lineNumber = 0;
     for(int x = 0;x<NUM_NODES;x++){
       displayOrders(x);
+      orders[x].clear();
     }
     for(int x = 0;x<pushedSourceId.size();x++){
       if(pushedSourceId[x]){
@@ -159,7 +148,6 @@ void loop() {
         pushedSourceId[x] = false;
       }
     }
-    orders.clear();
     Serial.println("Timeout reached clearing orders");
     start = millis();
     orderDisplayed.clear();
