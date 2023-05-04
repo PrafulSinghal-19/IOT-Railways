@@ -20,6 +20,7 @@ Next:
 #define NUM_NODES 4
 #define ORDER_DISPLAY 20
 #define TIMEOUT 60*1000
+#define PUSHED 5
 String id="05";
 
 Vector<Vector<String>> orders;
@@ -30,6 +31,9 @@ Vector<String> orderContainer[NUM_NODES];
 String orderDisplayContainer[ORDER_DISPLAY];
 Vector<String> orderDisplayed;
 
+Vector<bool> pushedSourceId;
+bool pushedSourceIdContainer[NUM_NODES];
+
 unsigned long start;
 
 void setup() {
@@ -37,6 +41,7 @@ void setup() {
   packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
   orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
   orderDisplayed.setStorage(orderDisplayContainer,ORDER_DISPLAY,0);
+  pushedSourceId.setStorage(pushedSourceIdContainer,NUM_NODES,NUM_NODES);
   Heltec.begin(true , true , true , true , BAND );
   Heltec.display->clear();
   Heltec.display->setFont(ArialMT_Plain_10);
@@ -57,34 +62,36 @@ void displayOrders(int nodeIndex){
     jsonMessage += orders[nodeIndex][i];
   }
 
-  DynamicJsonDocument doc(jsonMessage.length()*10);
-  DeserializationError error = deserializeJson(doc, jsonMessage);
+  if(jsonMessage!=""){
+    DynamicJsonDocument doc(jsonMessage.length()*10);
+    DeserializationError error = deserializeJson(doc, jsonMessage);
 
-  if (!error) {
-    String name = doc["name"];  // Access "name"
-    String coach = doc["coach"];       // Access "coach"
-    int seat = doc["seat"];
-    double totalPrice = doc["totalPrice"];
+    if (!error) {
+      String name = doc["name"];  // Access "name"
+      String coach = doc["coach"];       // Access "coach"
+      int seat = doc["seat"];
+      double totalPrice = doc["totalPrice"];
 
-    for(auto orderId: orderDisplayed){
-      if(orderId==coach+String(seat)){
-        return;
+      for(auto orderId: orderDisplayed){
+        if(orderId==coach+String(seat)){
+          return;
+        }
       }
+      Serial.println("person: " + name + " ordering from coach: " + coach + " on seat: " + seat + " total price: " + totalPrice);
+      JsonArray items = doc["items"];
+      for (JsonVariant item : items) {
+        String itemName = item["name"];    // Access "name" within each item
+        double itemPrice = item["price"];     // Access "price" within each item
+        int quantity = item["quantity"];
+        Serial.println("item: " + itemName + " : " + String(itemPrice) + " quantity: " + quantity);
+      }
+      
+      orderDisplayed.push_back(coach+String(seat));
+      Serial.println("pushed: "+String(orderDisplayed.size()));
+    } else {
+      Serial.println(jsonMessage);
+      Serial.println("Parsing failed with error: " + String(error.c_str()));
     }
-    Serial.println("person: " + name + " ordering from coach: " + coach + " on seat: " + seat + " total price: " + totalPrice);
-    JsonArray items = doc["items"];
-    for (JsonVariant item : items) {
-      String itemName = item["name"];    // Access "name" within each item
-      double itemPrice = item["price"];     // Access "price" within each item
-      int quantity = item["quantity"];
-      Serial.println("item: " + itemName + " : " + String(itemPrice) + " quantity: " + quantity);
-    }
-    
-    orderDisplayed.push_back(coach+String(seat));
-    Serial.println("pushed: "+String(orderDisplayed.size()));
-  } else {
-    Serial.println(jsonMessage);
-    Serial.println("Parsing failed with error: " + String(error.c_str()));
   }
 }
 
@@ -112,20 +119,30 @@ void loop() {
         Serial.println("size of orders in srcNode: " + orders[srcNodeIndex].size());
       }
     }
+    else if(incoming.substring(8) == "Push"){
+      pushedSourceId[srcNodeIndex] = true;
+    }
     else {
       int sequenceNo = incoming.substring(4,8).toInt();
       if(orders[srcNodeIndex][sequenceNo].length() == 0){
         orders[srcNodeIndex][sequenceNo] = incoming.substring(8);
         packetsLeft[srcNodeIndex] = packetsLeft[srcNodeIndex] - 1;
       }
-      if(packetsLeft[srcNodeIndex] == 0){
-        displayOrders(srcNodeIndex);
-      } 
     }
     start = millis();
   }
 
   if(millis()-start>TIMEOUT){
+    for(int x = 0;x<NUM_NODES;x++){
+      displayOrders(x);
+    }
+    for(int x = 0;x<pushedSourceId.size();x++){
+      if(pushedSourceId[x]){
+        Serial.println(String(x+1)+" wants to order.");
+        pushedSourceId[x] = false;
+      }
+    }
+    orders.clear();
     Serial.println("Timeout reached clearing orders");
     start = millis();
     orderDisplayed.clear();

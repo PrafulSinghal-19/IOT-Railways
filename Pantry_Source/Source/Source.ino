@@ -11,6 +11,7 @@
 #define MESSAGE_LENGTH 24
 #define DELAY 500
 #define TIMEOUT 30*1000
+#define PUSHED 5
 
 const byte interruptPin = 0;
 String userInput = "";
@@ -31,6 +32,9 @@ const char* password = "123456789";
 // Set web server port number to 80
 WebServer server(80);
 
+bool pushedButton = false;
+Vector<String> pushedMessages;
+String pushedMessagesContainer[NUM_NODES];
 
 unsigned long start;
 
@@ -43,7 +47,7 @@ void handleOrder(){
 void setup() {
   orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
   packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
-
+  pushedMessages.setStorage(pushedMessagesContainer,NUM_NODES,NUM_NODES);
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
   //WIFI Kit series V1 not support Vext control
@@ -74,11 +78,8 @@ void setup() {
   start = millis();
 
 }
-void getInput(){
-  userInput = "id";
-}
 void blink() {
-  getInput();
+  pushedButton = true;
 }
 
 bool recv = true;
@@ -122,6 +123,9 @@ void loop() {
           orders[srcNodeIndex][0] = incoming;
         }
       }
+      else if(incoming.substring(8) == "Push"){
+        pushedMessages[srcNodeIndex] = incoming; 
+      }
       else {
         int sequenceNo = incoming.substring(4,8).toInt();
         if(orders[srcNodeIndex][sequenceNo].length() == 0){
@@ -158,6 +162,20 @@ void loop() {
     }
     userInput = "";
   }
+  if(pushedButton){
+    String firstMessage = id;
+    firstMessage += id;
+    firstMessage += parseLength(0);
+    firstMessage += "Push";
+
+    LoRa.beginPacket();
+    LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+    LoRa.print(firstMessage);
+    LoRa.endPacket();    
+    delay(DELAY);
+
+    pushedButton = false;
+  }
 
   if(millis()-start>TIMEOUT){
     for(int x = 0;x<orders.size();x++){
@@ -179,6 +197,26 @@ void loop() {
         }
       }
       orders[x].clear();
+
+      for(int x = 0;x<pushedMessages.size();x++){
+        String message = pushedMessages[x];
+        if(message!=""){
+          String prevId = message.substring(0,2);
+          Serial.println("prev id: "+ prevId + " " + prevId.toInt());
+          if(prevId.toInt() < id.toInt()){
+            for(int j = 0; j < id.length(); j++){
+              message[j] = id[j];
+            }
+            LoRa.beginPacket();
+            LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+            LoRa.print(message);
+            LoRa.endPacket();
+            Serial.println(id+" message sent with: " +message);
+            delay(DELAY);
+          } 
+          pushedMessages[x] = "";
+        }
+      }
     }
     start = millis();
   }
