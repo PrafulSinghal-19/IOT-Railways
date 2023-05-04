@@ -1,19 +1,27 @@
 #include "heltec.h"
-
+#include "Vector.h"
 // Load Wi-Fi library
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
 
 #define BAND    868E6  //change this Band and set Class C
-
+#define NUM_NODES 4
 #define PANTRY "5"
 #define MESSAGE_LENGTH 24
+#define DELAY 500
+#define TIMEOUT 30*1000
 
 const byte interruptPin = 0;
 String userInput = "";
-String id="02";
+String id="03";
 
+
+Vector<Vector<String>> orders;
+Vector<String> orderContainer[NUM_NODES];
+
+Vector<int> packetsLeft;
+int packetsLeftContainer[NUM_NODES];
 
 // Replace with your network credentials
 String _ssid = "ESP32-Access-Point"+id;
@@ -24,6 +32,8 @@ const char* password = "123456789";
 WebServer server(80);
 
 
+unsigned long start;
+
 void handleOrder(){
   userInput = server.arg("plain");        
   server.send(200, "text/plain", "ORDER"+userInput);
@@ -31,6 +41,9 @@ void handleOrder(){
 }
 
 void setup() {
+  orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
+  packetsLeft.setStorage(packetsLeftContainer, NUM_NODES, NUM_NODES);
+
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), blink, FALLING);
   //WIFI Kit series V1 not support Vext control
@@ -57,6 +70,8 @@ void setup() {
   Serial.println("HTTP server started "+id);
   
   Serial.println("id: "+id);
+
+  start = millis();
 
 }
 void getInput(){
@@ -88,45 +103,34 @@ void loop() {
     while (LoRa.available()) {
       incoming+=(char)LoRa.read();
     }
+    int srcNodeIndex = incoming.substring(2,4).toInt() - 1;
+    Serial.println("recieved from node index: " + String(srcNodeIndex));
     Serial.println(id+" received "+incoming);
     Serial.print("RSSI: ");
     Serial.println(LoRa.packetRssi());
-    if(incoming.substring(8) == "First"){
-      int count = incoming.substring(4,8).toInt();
-      String messageArray[count+1];
-      messageArray[0] = incoming;
-      int packetCount = 0;
-      while(packetCount < count){
-        while(!LoRa.parsePacket());
-        String temp = "";
-        while (LoRa.available()) {
-          temp+=(char)LoRa.read();
+
+    String prevId = incoming.substring(0,2);
+    Serial.println("prev id: "+ prevId + " " + prevId.toInt());
+    if(prevId.toInt() < id.toInt()){
+      if(incoming.substring(8) == "First"){
+        if(packetsLeft[srcNodeIndex] == 0) {
+          int count = incoming.substring(4,8).toInt();
+          packetsLeft[srcNodeIndex] = count;
+          String* orderChunks = new String[count];
+          orders[srcNodeIndex].setStorage(orderChunks, count+1, count+1);
+          Serial.println("size of orders in srcNode: " + orders[srcNodeIndex].size());
+          orders[srcNodeIndex][0] = incoming;
         }
-        if(temp.substring(2,4) != incoming.substring(2,4)) continue; // skips the packet when not from the source which send the first packet
-        // replace prev-id with the current id
-        Serial.println(id+"temp received with " + String(packetCount) + " : " +temp);
-        Serial.print("RSSI: ");
-        Serial.println(LoRa.packetRssi());
-        messageArray[packetCount+1] = temp;
-        packetCount = packetCount + 1;
-        if(temp.substring(4,8).toInt() == count -1) break; // check for last packet if some packet missed
       }
-      String prevId = incoming.substring(0,2);
-      Serial.println("prev id: "+ prevId + " " + prevId.toInt());
-      if(prevId.toInt() < id.toInt()){
-        for(int i = 0; i < count+1; i++){
-          for(int j = 0; j < id.length(); j++){
-            messageArray[i][j] = id[j];
-          }
-          LoRa.beginPacket();
-          LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
-          LoRa.print(messageArray[i]);
-          LoRa.endPacket();
-          Serial.println(id+"message sent with index:" + String(i) + " : " +messageArray[i]);
-          delay(1000);
+      else {
+        int sequenceNo = incoming.substring(4,8).toInt();
+        if(orders[srcNodeIndex][sequenceNo].length() == 0){
+          orders[srcNodeIndex][sequenceNo] = incoming;
+          packetsLeft[srcNodeIndex] = packetsLeft[srcNodeIndex] - 1;
         }
       }
     }
+    start = millis();
   }
   if(userInput!=""){
     int length = userInput.length();
@@ -140,7 +144,7 @@ void loop() {
     LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
     LoRa.print(firstMessage);
     LoRa.endPacket();    
-    delay(1000);
+    delay(DELAY);
 
     for(int x = 0;x < len;x++){
       String temp = id + id; // prev and src are same
@@ -150,9 +154,33 @@ void loop() {
       LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
       LoRa.print(temp);
       LoRa.endPacket();    
-      delay(1000);
+      delay(DELAY);
     }
     userInput = "";
+  }
+
+  if(millis()-start>TIMEOUT){
+    for(int x = 0;x<orders.size();x++){
+      for(auto message: orders[x]){
+        if(message!=""){
+          String prevId = message.substring(0,2);
+          Serial.println("prev id: "+ prevId + " " + prevId.toInt());
+          if(prevId.toInt() < id.toInt()){
+            for(int j = 0; j < id.length(); j++){
+              message[j] = id[j];
+            }
+            LoRa.beginPacket();
+            LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+            LoRa.print(message);
+            LoRa.endPacket();
+            Serial.println(id+" message sent with: " +message);
+            delay(DELAY);
+          }
+        }
+      }
+      orders[x].clear();
+    }
+    start = millis();
   }
       
 }
