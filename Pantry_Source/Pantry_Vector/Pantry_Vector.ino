@@ -1,5 +1,4 @@
 #include "heltec.h"
-#include "ArduinoJson.h"
 #include "Vector.h"
 
 /* 
@@ -18,16 +17,12 @@ Next:
 #define BAND    868E6  //change this Band and set Class C
 #define PANTRY "5"
 #define NUM_NODES 4
-#define ORDER_DISPLAY 20
 #define TIMEOUT 60*1000
 #define PUSHED 5
 String id="05";
 
 Vector<Vector<String>> orders;
 Vector<String> orderContainer[NUM_NODES];
-
-String orderDisplayContainer[ORDER_DISPLAY];
-Vector<String> orderDisplayed;
 
 Vector<bool> pushedSourceId;
 bool pushedSourceIdContainer[NUM_NODES];
@@ -39,7 +34,6 @@ int lineNumber = 0;
 void setup() {
   //WIFI Kit series V1 not support Vext control
   orders.setStorage(orderContainer, NUM_NODES, NUM_NODES);
-  orderDisplayed.setStorage(orderDisplayContainer,ORDER_DISPLAY,0);
   pushedSourceId.setStorage(pushedSourceIdContainer,NUM_NODES,NUM_NODES);
 
   Heltec.begin(true , true , true , true , BAND );
@@ -55,46 +49,14 @@ void setup() {
 }
 
 void displayOrders(int nodeIndex){
-  String jsonMessage = "";
-
-  for(int i = 0; i < orders[nodeIndex].size() ; i++){
-    jsonMessage += orders[nodeIndex][i];
-  }
-
-  if(jsonMessage!=""){
-    Serial.println(jsonMessage);
-    DynamicJsonDocument doc(jsonMessage.length()*10);
-    DeserializationError error = deserializeJson(doc, jsonMessage);
-
-    if (!error) {
-      String name = doc["name"];  // Access "name"
-      String coach = doc["coach"];       // Access "coach"
-      int seat = doc["seat"];
-      double totalPrice = doc["totalPrice"];
-
-      for(auto orderId: orderDisplayed){
-        if(orderId==coach+String(seat)){
-          return;
-        }
-      }
-      Heltec.display->drawString(0,lineNumber,name+" "+coach+" "+seat);  lineNumber+=11;
+  for(auto message: orders[nodeIndex]){
+    Serial.println(message);
+    if(message!=""){
+      Heltec.display->drawString(0,lineNumber,message);  lineNumber+=11;
       Heltec.display->display();
-      Serial.println("person: " + name + " ordering from coach: " + coach + " on seat: " + seat + " total price: " + totalPrice);
-      JsonArray items = doc["items"];
-      for (JsonVariant item : items) {
-        String itemName = item["name"];    // Access "name" within each item
-        double itemPrice = item["price"];     // Access "price" within each item
-        int quantity = item["quantity"];
-        Serial.println("item: " + itemName + " : " + String(itemPrice) + " quantity: " + quantity);
-        Heltec.display->drawString(0,lineNumber,itemName+" "+quantity);  lineNumber+=11;
-        Heltec.display->display();
-      }
-      
-      orderDisplayed.push_back(coach+String(seat));
-      Serial.println("pushed: "+String(orderDisplayed.size()));
-    } else {
-      Serial.println(jsonMessage);
-      Serial.println("Parsing failed with error: " + String(error.c_str()));
+    }else{
+      Heltec.display->drawString(0,lineNumber,"Some packet lost.");  lineNumber+=11;
+      Heltec.display->display();
     }
   }
 }
@@ -102,7 +64,6 @@ void displayOrders(int nodeIndex){
 void loop() {
   int packetSize = LoRa.parsePacket();
   String incoming = "";
-  String jsonMessage = "";
   if (packetSize) {
     Serial.print("Received packet: ");
     while (LoRa.available()) {
@@ -125,7 +86,7 @@ void loop() {
     }
     else {
       int sequenceNo = incoming.substring(4,8).toInt();
-      if(orders[srcNodeIndex][sequenceNo].length() == 0){
+      if(orders[srcNodeIndex].size()>0 && orders[srcNodeIndex][sequenceNo].length() == 0){
         orders[srcNodeIndex][sequenceNo] = incoming.substring(8);
       }
     }
@@ -150,7 +111,6 @@ void loop() {
     }
     Serial.println("Timeout reached clearing orders");
     start = millis();
-    orderDisplayed.clear();
   }
 
 }

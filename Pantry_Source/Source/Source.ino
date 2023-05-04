@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+#include "ArduinoJson.h"
 
 #define BAND    868E6  //change this Band and set Class C
 #define NUM_NODES 4
@@ -34,11 +35,42 @@ Vector<String> pushedMessages;
 String pushedMessagesContainer[NUM_NODES];
 
 unsigned long start;
-
+String format24(String s){
+  if(s.length()>24){
+    return s.substring(0,24);
+  }
+  while(s.length()<24){
+    s+=" ";
+  }
+  return s;
+}
 void handleOrder(){
   userInput = server.arg("plain");        
   server.send(200, "text/plain", "ORDER"+userInput);
   Serial.println("message: "+userInput);
+
+  DynamicJsonDocument doc(userInput.length()*10);
+  DeserializationError error = deserializeJson(doc, userInput);
+
+  if (!error) {
+    String name = doc["name"];  // Access "name"
+    String coach = doc["coach"];       // Access "coach"
+    int seat = doc["seat"];
+    double totalPrice = doc["totalPrice"];
+
+    userInput = format24(coach+":"+seat+":"+totalPrice+":"+name);
+    Serial.println("person: " + name + " ordering from coach: " + coach + " on seat: " + seat + " total price: " + totalPrice);
+    JsonArray items = doc["items"];
+    for (JsonVariant item : items) {
+      String itemName = item["name"];    // Access "name" within each item
+      double itemPrice = item["price"];     // Access "price" within each item
+      int quantity = item["quantity"];
+      Serial.println("item: " + itemName + " : " + String(itemPrice) + " quantity: " + quantity);
+      userInput+=format24(itemName+":"+quantity+":"+itemPrice);
+    }
+  } else {
+    Serial.println("Parsing failed with error: " + String(error.c_str()));
+  }
 }
 
 void setup() {
@@ -126,7 +158,7 @@ void loop() {
       }
       else {
         int sequenceNo = incoming.substring(4,8).toInt();
-        if(orders[srcNodeIndex][sequenceNo+1].length() == 0){
+        if(orders[srcNodeIndex].size()>0 && orders[srcNodeIndex][sequenceNo+1].length() == 0){
           orders[srcNodeIndex][sequenceNo+1] = incoming;
         }
       }
